@@ -2,104 +2,156 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const Product = require("../models/Product.js");
+const Product = require("../models/Product");
 
 const router = express.Router();
 
-// Image storage setup
+/* ==============================
+   UPLOADS CONFIG
+================================ */
+
+const UPLOAD_DIR = path.join(__dirname, "..", "uploads");
+
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "uploads/");
+    cb(null, UPLOAD_DIR);
   },
   filename: (req, file, cb) => {
-    const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, unique + path.extname(file.originalname));
+    const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, uniqueName + path.extname(file.originalname));
   },
 });
 
 const upload = multer({ storage });
 
-/**
- * GET ALL PRODUCTS
- */
+/* ==============================
+   GET ALL PRODUCTS
+   ?category=soil | mulch
+================================ */
+
 router.get("/", async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
+    const { category } = req.query;
+
+    const filter = {};
+    if (category) filter.category = category;
+
+    const products = await Product.find(filter).sort({
+      createdAt: -1,
+    });
+
     res.json(products);
   } catch (err) {
-    res.status(500).json({ error: "Server error" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch products" });
   }
 });
 
-/**
- * ADD PRODUCT
- */
+/* ==============================
+   CREATE PRODUCT
+================================ */
+
 router.post("/", upload.single("productImage"), async (req, res) => {
   try {
-    const body = req.body;
+    if (!req.file) return res.status(400).json({ error: "Image is required" });
 
-    const product = new Product({
-      ...body,
-      productImage: req.file?.filename,
+    const requiredFields = [
+      "nameEN",
+      "nameAR",
+      "desEN",
+      "desAR",
+      "price",
+      "quantity",
+      "typeEN",
+      "typeAR",
+      "size",
+      "unitEN",
+      "unitAR",
+      "category",
+    ];
+
+    for (const field of requiredFields) {
+      if (!req.body[field]) {
+        return res.status(400).json({
+          error: `${field} is required`,
+        });
+      }
+    }
+
+    const product = await Product.create({
+      ...req.body,
+      productImage: req.file.filename,
     });
 
-    await product.save();
-    res.json(product);
+    res.status(201).json(product);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create product" });
   }
 });
 
-/**
- * UPDATE PRODUCT
- */
+/* ==============================
+   UPDATE PRODUCT
+================================ */
+
 router.put("/:id", upload.single("productImage"), async (req, res) => {
   try {
-    const body = req.body;
+    const product = await Product.findById(req.params.id);
 
-    let updates = { ...body };
+    if (!product) return res.status(404).json({ error: "Product not found" });
 
-    // If uploading a new image, delete old one
+    const updates = { ...req.body };
+
     if (req.file) {
-      const old = await Product.findById(req.params.id);
+      // delete old image safely
+      if (product.productImage) {
+        const oldImagePath = path.join(UPLOAD_DIR, product.productImage);
 
-      if (old?.productImage) {
-        const oldPath = `uploads/${old.productImage}`;
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        fs.promises.unlink(oldImagePath).catch(() => {}); // prevent ENOENT crash
       }
 
       updates.productImage = req.file.filename;
     }
 
-    const updated = await Product.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-    });
+    const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { new: true }
+    );
 
-    res.json(updated);
+    res.json(updatedProduct);
   } catch (err) {
-    res.status(500).json({ error: "Failed to update" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to update product" });
   }
 });
 
-/**
- * DELETE PRODUCT
- */
+/* ==============================
+   DELETE PRODUCT
+================================ */
+
 router.delete("/:id", async (req, res) => {
   try {
-    const prod = await Product.findByIdAndDelete(req.params.id);
+    const product = await Product.findById(req.params.id);
 
-    if (!prod) return res.status(404).json({ error: "Not found" });
+    if (!product) return res.status(404).json({ error: "Product not found" });
 
-    // Delete image if exists
-    if (prod.productImage) {
-      const img = `uploads/${prod.productImage}`;
-      if (fs.existsSync(img)) fs.unlinkSync(img);
+    if (product.productImage) {
+      const imgPath = path.join(UPLOAD_DIR, product.productImage);
+
+      fs.promises.unlink(imgPath).catch(() => {});
     }
 
-    res.json({ message: "Product deleted" });
+    await product.deleteOne();
+
+    res.json({ message: "Product deleted successfully" });
   } catch (err) {
-    res.status(500).json({ error: "Failed to delete" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete product" });
   }
 });
 

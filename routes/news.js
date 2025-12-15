@@ -35,10 +35,18 @@ router.get("/", async (req, res) => {
 // POST create news
 router.post("/", upload.single("newsImage"), async (req, res) => {
   try {
-    const { titleEN, titleAR, desEN, desAR } = req.body;
+    const { titleEN, titleAR, desEN, desAR, link } = req.body;
     const newsImage = req.file ? req.file.filename : null;
 
-    const newNews = new News({ titleEN, titleAR, desEN, desAR, newsImage });
+    const newNews = new News({
+      titleEN,
+      titleAR,
+      desEN,
+      desAR,
+      link,
+      newsImage,
+    });
+
     await newNews.save();
     res.json(newNews);
   } catch (err) {
@@ -50,13 +58,11 @@ router.post("/", upload.single("newsImage"), async (req, res) => {
 // PUT update news
 router.put("/:id", upload.single("newsImage"), async (req, res) => {
   try {
-    const { id } = req.params;
-    const news = await News.findById(id);
+    const news = await News.findById(req.params.id);
     if (!news) return res.status(404).send("News not found");
 
-    const { titleEN, titleAR, desEN, desAR } = req.body;
+    const { titleEN, titleAR, desEN, desAR, link } = req.body;
 
-    // Replace image if new one is uploaded
     if (req.file) {
       if (news.newsImage) {
         const oldPath = path.join(__dirname, "../uploads", news.newsImage);
@@ -69,6 +75,7 @@ router.put("/:id", upload.single("newsImage"), async (req, res) => {
     news.titleAR = titleAR;
     news.desEN = desEN;
     news.desAR = desAR;
+    news.link = link;
 
     await news.save();
     res.json(news);

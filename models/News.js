@@ -6,7 +6,8 @@ const newsSchema = new mongoose.Schema(
     titleAR: { type: String, required: true },
     desEN: { type: String, required: true },
     desAR: { type: String, required: true },
-    newsImage: { type: String }, // filename
+    link: { type: String, required: true },
+    newsImage: { type: String },
   },
   { timestamps: true }
 );
