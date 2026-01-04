@@ -32,7 +32,9 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // connect database
 mongoose
-  .connect(process.env.MONGO_URL)
+  .connect(
+    "mongodb+srv://ebrahimmohamedebrahim2024_db_user:keJJ3RnZF1x4fPsE@growwe.xwylufa.mongodb.net/?appName=Growwe"
+  )
   .then(() => console.log("DB connected"))
   .catch((err) => console.error("DB Connection Error:", err));
 
