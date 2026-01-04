@@ -18,6 +18,7 @@ app.use(
       "https://194.164.76.51:3001",
       "https://www.growwe.com",
       "https://growwe.com",
+      "https://growwe/api.com",
       "https://api.growwe.com",
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
