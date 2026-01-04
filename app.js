@@ -10,10 +10,20 @@ const app = express();
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_ORIGIN || "http://localhost:3000",
-    credentials: true,
+    origin: [
+      "http://localhost:3000",
+      "http://194.164.76.51",
+      "https://194.164.76.51",
+      "http://194.164.76.51:3001",
+      "https://194.164.76.51:3001",
+      "https://www.growwe.com",
+      "https://growwe.com",
+      "https://api.growwe.com",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
   })
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
