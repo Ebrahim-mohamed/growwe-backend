@@ -1,101 +1,62 @@
-// backend/routes/users.js
 const express = require("express");
 const router = express.Router();
+const auth = require("../middleware/auth");
 const User = require("../models/User");
-const Order = require("../models/Order");
-const { requireAuth, requireAdmin } = require("../middleware/auth");
 
-// ADMIN: list users with order counts
-router.get("/", requireAuth, requireAdmin, async (req, res) => {
+// Get current user
+router.get("/me", auth, async (req, res) => {
   try {
-    const users = await User.find().lean();
-    const enhanced = await Promise.all(
-      users.map(async (u) => {
-        const ordersCount = await Order.countDocuments({ buyer: u._id });
-        return { ...u, ordersCount };
-      })
-    );
-    res.json(enhanced);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+    const user = await User.findById(req.userId)
+      .select("-password -refreshToken")
+      .populate("cart.productId");
 
-// ADMIN: delete user
-router.delete("/:id", requireAuth, requireAdmin, async (req, res) => {
-  try {
-    const id = req.params.id;
-    await User.deleteOne({ _id: id });
-    await Order.deleteMany({ buyer: id });
-    res.json({ message: "User deleted" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// USER: get current user's cart and profile
-router.get("/me", requireAuth, async (req, res) => {
-  try {
-    const me = await User.findById(req.user.id)
-      .populate({ path: "cart.productId", select: "nameEN price productImage" })
-      .populate("wishlist")
-      .lean();
-    res.json(me);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// USER: add to cart
-router.post("/cart", requireAuth, async (req, res) => {
-  try {
-    const { productId, quantity = 1 } = req.body;
-    const user = await User.findById(req.user.id);
-    const exists = user.cart.find((c) => c.productId.toString() === productId);
-    if (exists) {
-      exists.quantity = exists.quantity + quantity;
-    } else {
-      user.cart.push({ productId, quantity });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
-    await user.save();
-    res.json({ message: "Added to cart" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+
+    res.json(user);
+  } catch (error) {
+    console.error("Get user error:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-// USER: update cart item
-router.put("/cart", requireAuth, async (req, res) => {
+// Update user profile
+router.put("/me", auth, async (req, res) => {
   try {
-    const { productId, quantity } = req.body;
-    const user = await User.findById(req.user.id);
-    user.cart = user.cart.map((c) =>
-      c.productId.toString() === productId ? { ...c.toObject(), quantity } : c
-    );
-    await user.save();
-    res.json({ message: "Cart updated" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+    const { phone, address, country, city, area } = req.body;
 
-// USER: remove from cart
-router.delete("/cart/:productId", requireAuth, async (req, res) => {
-  try {
-    const pid = req.params.productId;
-    await User.updateOne(
-      { _id: req.user.id },
-      { $pull: { cart: { productId: pid } } }
-    );
-    res.json({ message: "Removed" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    const user = await User.findById(req.userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Update fields
+    if (phone) user.phone = phone;
+    if (address) user.address = address;
+    if (country) user.country = country;
+    if (city) user.city = city;
+    if (area) user.area = area;
+
+    await user.save();
+
+    res.json({
+      message: "Profile updated successfully",
+      user: {
+        id: user._id,
+        userName: user.userName,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+        country: user.country,
+        city: user.city,
+        area: user.area,
+      },
+    });
+  } catch (error) {
+    console.error("Update user error:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 

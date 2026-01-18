@@ -1,101 +1,183 @@
-// backend/routes/auth.js
 const express = require("express");
 const router = express.Router();
-const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-const { generateAccessToken } = require("../middleware/auth");
 
-const REFRESH_TOKEN_SECRET =
-  process.env.REFRESH_TOKEN_SECRET || "change_refresh";
-const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || "change_access";
-const REFRESH_EXPIRE = "7d";
+// Generate tokens
+const generateAccessToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "15m" });
+};
 
-function generateRefreshToken(user) {
-  return jwt.sign({ id: user._id, role: user.role }, REFRESH_TOKEN_SECRET, {
-    expiresIn: REFRESH_EXPIRE,
+const generateRefreshToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: "7d",
   });
-}
+};
 
-// Register
-router.post("/register", async (req, res) => {
+// Signup route - FIXED
+router.post("/signup", async (req, res) => {
   try {
-    const { userName, email, password } = req.body;
-    if (!userName || !password)
-      return res.status(400).json({ error: "Missing required fields" });
+    const { userName, email, password, phone, address, country, city, area } =
+      req.body;
 
-    const exists = await User.findOne({ userName });
-    if (exists)
-      return res.status(409).json({ error: "Username already taken" });
+    // Check if user already exists
+    const existingUser = await User.findOne({ $or: [{ email }, { userName }] });
+    if (existingUser) {
+      return res.status(400).json({
+        message:
+          existingUser.email === email
+            ? "Email already registered"
+            : "Username already taken",
+      });
+    }
 
-    const hash = await bcrypt.hash(password, 10);
-    const user = new User({ userName, email, passwordHash: hash });
-    await user.save();
+    // Generate tokens
+    const accessToken = generateAccessToken(userName); // Temporary, will use _id after save
+    const refreshToken = generateRefreshToken(userName);
 
-    res.status(201).json({ message: "Registered" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+    // Create new user WITH refresh token - SAVE ONLY ONCE
+    const user = new User({
+      userName,
+      email,
+      password,
+      phone,
+      address,
+      country,
+      city,
+      area,
+      refreshToken, // Add refresh token before first save
+    });
+
+    await user.save(); // ONLY ONE SAVE
+
+    // Generate proper tokens with user._id
+    const finalAccessToken = generateAccessToken(user._id);
+    const finalRefreshToken = generateRefreshToken(user._id);
+
+    // Update refresh token if needed (without triggering save hook)
+    await User.updateOne(
+      { _id: user._id },
+      { refreshToken: finalRefreshToken },
+    );
+
+    // Set refresh token as httpOnly cookie
+    res.cookie("refreshToken", finalRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    res.status(201).json({
+      message: "User created successfully",
+      accessToken: finalAccessToken,
+      user: {
+        id: user._id,
+        userName: user.userName,
+        email: user.email,
+      },
+    });
+  } catch (error) {
+    console.error("Signup error:", error);
+    res.status(500).json({ message: "Server error during signup" });
   }
 });
 
-// Login
+// Login route - FIXED
 router.post("/login", async (req, res) => {
   try {
     const { userName, password } = req.body;
+
+    // Find user
     const user = await User.findOne({ userName });
-    if (!user) return res.status(401).json({ error: "Invalid credentials" });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: "Invalid credentials" });
+    // Check password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
+    // Generate tokens
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
 
-    // Send refresh token as httpOnly cookie
+    // Update refresh token using updateOne (avoids triggering pre-save hook)
+    await User.updateOne({ _id: user._id }, { refreshToken });
+
+    // Set refresh token as httpOnly cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.json({
+      message: "Login successful",
       accessToken,
-      user: { id: user._id, userName: user.userName, role: user.role },
+      user: {
+        id: user._id,
+        userName: user.userName,
+        email: user.email,
+      },
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Server error during login" });
   }
 });
 
-// Refresh
+// Refresh token route
 router.post("/refresh", async (req, res) => {
   try {
-    const token = req.cookies?.refreshToken;
-    if (!token) return res.status(401).json({ error: "No refresh token" });
+    const refreshToken = req.cookies.refreshToken;
 
-    const payload = jwt.verify(token, REFRESH_TOKEN_SECRET);
-    const user = await User.findById(payload.id);
-    if (!user) return res.status(401).json({ error: "Invalid refresh token" });
+    if (!refreshToken) {
+      return res.status(401).json({ message: "Refresh token not found" });
+    }
 
-    const accessToken = jwt.sign(
-      { id: user._id, role: user.role },
-      ACCESS_TOKEN_SECRET,
-      { expiresIn: "15m" }
-    );
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+
+    // Find user and check if refresh token matches
+    const user = await User.findById(decoded.userId);
+    if (!user || user.refreshToken !== refreshToken) {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+
+    // Generate new access token
+    const accessToken = generateAccessToken(user._id);
+
     res.json({ accessToken });
-  } catch (err) {
-    console.error(err);
-    res.status(401).json({ error: "Invalid token" });
+  } catch (error) {
+    console.error("Refresh token error:", error);
+    res.status(401).json({ message: "Invalid or expired refresh token" });
   }
 });
 
-// Logout
-router.post("/logout", (req, res) => {
-  res.clearCookie("refreshToken");
-  res.json({ message: "Logged out" });
+// Logout route
+router.post("/logout", async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (refreshToken) {
+      // Remove refresh token from user
+      await User.findOneAndUpdate(
+        { refreshToken },
+        { $unset: { refreshToken: 1 } },
+      );
+    }
+
+    // Clear cookie
+    res.clearCookie("refreshToken");
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ message: "Server error during logout" });
+  }
 });
 
 module.exports = router;
