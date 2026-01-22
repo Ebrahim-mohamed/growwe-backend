@@ -5,13 +5,21 @@ const User = require("../models/User");
 
 // Generate tokens
 const generateAccessToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: "15m" });
+  return jwt.sign(
+    { userId },
+    "8f7a9b2c4d6e1f3a5b7c9d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a",
+    { expiresIn: "15m" },
+  );
 };
 
 const generateRefreshToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: "7d",
-  });
+  return jwt.sign(
+    { userId },
+    "1a3b5c7d9e0f2a4b6c8d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a2",
+    {
+      expiresIn: "7d",
+    },
+  );
 };
 
 // Signup route - FIXED
@@ -140,7 +148,10 @@ router.post("/refresh", async (req, res) => {
     }
 
     // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const decoded = jwt.verify(
+      refreshToken,
+      "1a3b5c7d9e0f2a4b6c8d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a2",
+    );
 
     // Find user and check if refresh token matches
     const user = await User.findById(decoded.userId);

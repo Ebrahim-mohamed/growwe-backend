@@ -12,7 +12,10 @@ const auth = async (req, res, next) => {
         .json({ message: "No authentication token, access denied" });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(
+      token,
+      "8f7a9b2c4d6e1f3a5b7c9d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a",
+    );
     const user = await User.findById(decoded.userId).select(
       "-password -refreshToken",
     );
@@ -43,7 +46,10 @@ const requireAuth = async (req, res, next) => {
         .json({ message: "No authentication token, access denied" });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(
+      token,
+      "8f7a9b2c4d6e1f3a5b7c9d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a",
+    );
     const user = await User.findById(decoded.userId).select(
       "-password -refreshToken",
     );
