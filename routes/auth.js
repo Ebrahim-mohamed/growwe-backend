@@ -94,10 +94,10 @@ router.post("/signup", async (req, res) => {
 // Login route - FIXED
 router.post("/login", async (req, res) => {
   try {
-    const { userName, password } = req.body;
+    const { email, password } = req.body;
 
     // Find user
-    const user = await User.findOne({ userName });
+    const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
