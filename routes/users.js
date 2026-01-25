@@ -60,4 +60,36 @@ router.put("/me", auth, async (req, res) => {
   }
 });
 
+// Get all users (Admin dashboard)
+router.get("/", async (req, res) => {
+  try {
+    const users = await User.find()
+      .select("-password -refreshToken")
+      .sort({ createdAt: -1 });
+
+    res.json(users);
+  } catch (error) {
+    console.error("Get users error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Delete user by ID (Admin dashboard)
+router.delete("/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    await user.deleteOne();
+
+    res.json({ message: "User deleted successfully" });
+  } catch (error) {
+    console.error("Delete user error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;
