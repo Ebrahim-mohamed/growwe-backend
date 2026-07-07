@@ -32,11 +32,8 @@ app.use(cookieParser());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Connect database
-mongoose
-  .connect(
-    "mongodb+srv://growwe:3VJKhcozXw8jjN9L@cluster0.ur5kj.mongodb.net/?appName=Cluster0",
-  )
-  .then(() => console.log("DB connected"))
+mongoose.connect("mongodb://127.0.0.1:27017/growwe")
+.then(() => console.log("DB connected"))
   .catch((err) => console.error("DB Connection Error:", err));
 
 // Import routes
