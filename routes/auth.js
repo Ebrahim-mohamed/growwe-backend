@@ -8,7 +8,7 @@ const cookieParser = require("cookie-parser");
 
 const adminAuth = require("../middleware/adminAuth");
 
-// Middleware to parse cookies
+// Middleware to parse cookies (still needed for customer authentication)
 router.use(cookieParser());
 
 // Trust proxy for secure cookies if behind Nginx
@@ -80,7 +80,6 @@ router.post("/signup", async (req, res) => {
       area,
     });
 
-    // isAdmin automatically defaults to false
     await user.save();
 
     const accessToken = generateAccessToken(user._id);
@@ -246,7 +245,7 @@ router.post("/logout", async (req, res) => {
 });
 
 // ======================================
-// ADMIN LOGIN (NO JWT)
+// ADMIN LOGIN (LOCAL STORAGE TOKEN)
 // ======================================
 
 router.post("/admin/login", async (req, res) => {
@@ -278,7 +277,7 @@ router.post("/admin/login", async (req, res) => {
       });
     }
 
-    // Generate a random session token, NOT JWT
+    // Generate a random session token
     const token = crypto.randomBytes(48).toString("hex");
 
     const expiresAt = new Date(
@@ -291,16 +290,11 @@ router.post("/admin/login", async (req, res) => {
 
     await admin.save();
 
-    res.cookie("adminToken", token, {
-      httpOnly: true,
-      secure: req.secure,
-      sameSite: "lax",
-      maxAge: 8 * 60 * 60 * 1000,
-      path: "/",
-    });
-
+    // Return the token to the frontend
+    // Frontend will store it in localStorage
     return res.status(200).json({
       message: "Admin login successful.",
+      token,
       admin: {
         id: admin._id,
         userName: admin.userName,
@@ -335,31 +329,21 @@ router.get("/admin/me", adminAuth, (req, res) => {
 // ADMIN LOGOUT
 // ======================================
 
-router.post("/admin/logout", async (req, res) => {
+router.post("/admin/logout", adminAuth, async (req, res) => {
   try {
-    const token = req.cookies?.adminToken;
-
-    if (token) {
-      await User.updateOne(
-        {
-          adminSession: token,
-          isAdmin: true,
+    await User.updateOne(
+      {
+        _id: req.admin._id,
+        adminSession: req.adminToken,
+        isAdmin: true,
+      },
+      {
+        $set: {
+          adminSession: null,
+          adminSessionExpiresAt: null,
         },
-        {
-          $set: {
-            adminSession: null,
-            adminSessionExpiresAt: null,
-          },
-        }
-      );
-    }
-
-    res.clearCookie("adminToken", {
-      httpOnly: true,
-      secure: req.secure,
-      sameSite: "lax",
-      path: "/",
-    });
+      }
+    );
 
     return res.status(200).json({
       message: "Admin logged out successfully.",

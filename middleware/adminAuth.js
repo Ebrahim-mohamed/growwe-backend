@@ -3,7 +3,13 @@ const User = require("../models/User");
 
 const adminAuth = async (req, res, next) => {
   try {
-    const token = req.cookies?.adminToken;
+    // Read admin token from Authorization header
+    const authHeader = req.headers.authorization;
+
+    const token =
+      authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.split(" ")[1]
+        : null;
 
     if (!token) {
       return res.status(401).json({
@@ -11,6 +17,7 @@ const adminAuth = async (req, res, next) => {
       });
     }
 
+    // Find admin with a valid session
     const admin = await User.findOne({
       adminSession: token,
       isAdmin: true,
@@ -24,6 +31,7 @@ const adminAuth = async (req, res, next) => {
     }
 
     req.admin = admin;
+    req.adminToken = token;
 
     next();
   } catch (error) {
