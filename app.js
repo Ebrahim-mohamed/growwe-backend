@@ -1,14 +1,18 @@
-// backend/app.js
+
 const express = require("express");
 const mongoose = require("mongoose");
 const path = require("path");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+
 require("dotenv").config();
 
 const app = express();
 
-// CORS configuration - IMPORTANT: Add credentials: true
+// Trust Nginx reverse proxy
+app.set("trust proxy", 1);
+
+// CORS configuration
 app.use(
   cors({
     origin: [
@@ -22,18 +26,20 @@ app.use(
       "https://api.growwe.com",
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true, // IMPORTANT: This allows cookies to be sent
-  }),
+    credentials: true,
+  })
 );
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Connect database
-mongoose.connect("mongodb://127.0.0.1:27017/growwe")
-.then(() => console.log("DB connected"))
+mongoose
+  .connect("mongodb://127.0.0.1:27017/growwe")
+  .then(() => console.log("DB connected"))
   .catch((err) => console.error("DB Connection Error:", err));
 
 // Import routes
@@ -41,32 +47,41 @@ const authRoutes = require("./routes/auth");
 const usersRoutes = require("./routes/users");
 const ordersRoutes = require("./routes/orders");
 const paymentsRoutes = require("./routes/payments");
-const cartRoutes = require("./routes/cart"); // Add cart routes
+const cartRoutes = require("./routes/cart");
 const productsRoutes = require("./routes/products");
 const newsRoutes = require("./routes/news");
 
-// Use routes
+// Register routes
 app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);
 app.use("/orders", ordersRoutes);
 app.use("/payments", paymentsRoutes);
-app.use("/cart", cartRoutes); // Add cart routes
+app.use("/cart", cartRoutes);
 app.use("/products", productsRoutes);
 app.use("/news", newsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
+
   res.status(500).json({
     message: "Something went wrong!",
-    error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    error:
+      process.env.NODE_ENV === "development"
+        ? err.message
+        : undefined,
   });
 });
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ message: "Route not found" });
+  res.status(404).json({
+    message: "Route not found",
+  });
 });
 
 const PORT = process.env.PORT || 3002;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
